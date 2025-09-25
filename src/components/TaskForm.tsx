@@ -10,7 +10,7 @@ import { Task } from '@/components/TaskManager';
 
 interface TaskFormProps {
   task?: Task | null;
-  onSubmit: (data: Omit<Task, 'id' | 'created_at' | 'completed' | 'completed_at'>) => void;
+  onSubmit: (data: Pick<Task, 'title' | 'description' | 'category' | 'priority' | 'due_date'>) => void;
   onClose: () => void;
 }
 

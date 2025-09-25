@@ -1,15 +1,24 @@
 import React from 'react';
 import { Trophy, Zap, Target, Flame } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { UserData } from '@/components/TaskManager';
+
+interface Profile {
+  total_xp: number;
+  current_level: number;
+  current_streak: number;
+  longest_streak: number;
+  tasks_completed: number;
+  focus_minutes: number;
+  achievements: string[];
+}
 
 interface UserStatsProps {
-  userData: UserData;
+  userData: Profile;
 }
 
 export function UserStats({ userData }: UserStatsProps) {
-  const xpToNextLevel = (userData.level * 100) - userData.totalXP;
-  const currentLevelXP = userData.totalXP - ((userData.level - 1) * 100);
+  const xpToNextLevel = (userData.current_level * 100) - userData.total_xp;
+  const currentLevelXP = userData.total_xp - ((userData.current_level - 1) * 100);
   const progressPercentage = (currentLevelXP / 100) * 100;
 
   return (
@@ -20,7 +29,7 @@ export function UserStats({ userData }: UserStatsProps) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <Trophy className="w-5 h-5 text-neon-cyan" />
             <span className="text-2xl font-bold text-gradient">
-              Level {userData.level}
+              Level {userData.current_level}
             </span>
           </div>
           
@@ -43,7 +52,7 @@ export function UserStats({ userData }: UserStatsProps) {
           <div className="space-y-1">
             <Zap className="w-4 h-4 text-neon-purple mx-auto" />
             <div className="text-lg font-bold text-neon-purple">
-              {userData.totalXP.toLocaleString()}
+              {userData.total_xp.toLocaleString()}
             </div>
             <div className="text-xs text-muted-foreground">Total XP</div>
           </div>
@@ -52,7 +61,7 @@ export function UserStats({ userData }: UserStatsProps) {
           <div className="space-y-1">
             <Target className="w-4 h-4 text-success mx-auto" />
             <div className="text-lg font-bold text-success">
-              {userData.tasksCompleted}
+              {userData.tasks_completed}
             </div>
             <div className="text-xs text-muted-foreground">Tasks Done</div>
           </div>
@@ -61,7 +70,7 @@ export function UserStats({ userData }: UserStatsProps) {
           <div className="space-y-1">
             <Flame className="w-4 h-4 text-warning mx-auto" />
             <div className="text-lg font-bold text-warning">
-              {userData.currentStreak}
+              {userData.current_streak}
             </div>
             <div className="text-xs text-muted-foreground">Streak</div>
           </div>

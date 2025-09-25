@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Flag, Archive, Zap, Trophy, Clock } from 'lucide-react';
+import { Plus, Calendar, Flag, Archive, Zap, Trophy, Clock, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { TaskForm } from '@/components/TaskForm';
@@ -7,17 +7,21 @@ import { TaskList } from '@/components/TaskList';
 import { PomodoroTimer } from '@/components/PomodoroTimer';
 import { UserStats } from '@/components/UserStats';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface Task {
   id: string;
   title: string;
-  description?: string;
-  category: 'work' | 'study' | 'personal' | 'urgent';
-  priority: 'low' | 'medium' | 'high';
-  due_date?: string;
+  description?: string | null;
+  category: string;
+  priority: string;
+  due_date?: string | null;
   completed: boolean;
   created_at: string;
-  completed_at?: string;
+  completed_at?: string | null;
+  updated_at: string;
+  user_id: string;
 }
 
 export interface UserData {
@@ -31,73 +35,76 @@ export interface UserData {
 }
 
 export function TaskManager() {
+  const { user, profile, signOut, updateProfile } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
-  const [userData, setUserData] = useState<UserData>({
-    totalXP: 0,
-    level: 1,
-    currentStreak: 0,
-    longestStreak: 0,
-    tasksCompleted: 0,
-    focusMinutes: 0,
-    achievements: []
-  });
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load data from localStorage on mount
+  // Load tasks from Supabase on mount
   useEffect(() => {
-    const savedTasks = localStorage.getItem('cyberpunk-tasks');
-    const savedUserData = localStorage.getItem('cyberpunk-user');
+    if (user) {
+      loadTasks();
+    }
+  }, [user]);
+
+  const loadTasks = async () => {
+    if (!user) return;
     
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    }
-    if (savedUserData) {
-      setUserData(JSON.parse(savedUserData));
-    }
-  }, []);
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
 
-  // Save to localStorage whenever tasks or userData changes
-  useEffect(() => {
-    localStorage.setItem('cyberpunk-tasks', JSON.stringify(tasks));
-  }, [tasks]);
-
-  useEffect(() => {
-    localStorage.setItem('cyberpunk-user', JSON.stringify(userData));
-  }, [userData]);
-
-  const addXP = (amount: number, reason: string) => {
-    setUserData(prev => {
-      const newXP = prev.totalXP + amount;
-      const newLevel = Math.floor(newXP / 100) + 1;
-      const leveledUp = newLevel > prev.level;
-      
-      if (leveledUp) {
-        toast({
-          title: "🎉 LEVEL UP!",
-          description: `You've reached level ${newLevel}! Amazing progress!`,
-          className: "animate-scale-in border-neon-cyan bg-card/90 backdrop-blur-sm"
-        });
-      }
-      
+    if (error) {
       toast({
-        title: `+${amount} XP`,
-        description: reason,
-        className: "animate-slide-in-right border-neon-purple bg-card/90 backdrop-blur-sm"
+        title: "Error Loading Tasks",
+        description: error.message,
+        className: "animate-fade-in border-destructive bg-destructive/10 backdrop-blur-sm"
       });
-      
-      return {
-        ...prev,
-        totalXP: newXP,
-        level: newLevel
-      };
+    } else {
+      setTasks(data || []);
+    }
+    setLoading(false);
+  };
+
+  const addXP = async (amount: number, reason: string) => {
+    if (!profile || !user) return;
+    
+    const newXP = profile.total_xp + amount;
+    const newLevel = Math.floor(newXP / 100) + 1;
+    const leveledUp = newLevel > profile.current_level;
+    
+    const updates = {
+      total_xp: newXP,
+      current_level: newLevel
+    };
+    
+    await updateProfile(updates);
+    
+    if (leveledUp) {
+      toast({
+        title: "🎉 LEVEL UP!",
+        description: `You've reached level ${newLevel}! Amazing progress!`,
+        className: "animate-scale-in border-neon-cyan bg-card/90 backdrop-blur-sm"
+      });
+    }
+    
+    toast({
+      title: `+${amount} XP`,
+      description: reason,
+      className: "animate-slide-in-right border-neon-purple bg-card/90 backdrop-blur-sm"
     });
   };
 
-  const checkAchievements = (updatedTasks: Task[], updatedUserData: UserData) => {
-    const completedToday = updatedTasks.filter(task => 
+  const checkAchievements = async (completedTasksCount: number) => {
+    if (!profile || !user) return;
+    
+    const completedToday = tasks.filter(task => 
       task.completed && 
       task.completed_at && 
       new Date(task.completed_at).toDateString() === new Date().toDateString()
@@ -106,17 +113,17 @@ export function TaskManager() {
     const newAchievements: string[] = [];
 
     // First task achievement
-    if (updatedUserData.tasksCompleted === 1 && !updatedUserData.achievements.includes('first_task')) {
+    if (completedTasksCount === 1 && !profile.achievements.includes('first_task')) {
       newAchievements.push('first_task');
     }
 
     // Task master (10 tasks in a day)
-    if (completedToday >= 10 && !updatedUserData.achievements.includes('task_master')) {
+    if (completedToday >= 10 && !profile.achievements.includes('task_master')) {
       newAchievements.push('task_master');
     }
 
     // Consistency king (7 day streak)
-    if (updatedUserData.currentStreak >= 7 && !updatedUserData.achievements.includes('consistency_king')) {
+    if (profile.current_streak >= 7 && !profile.achievements.includes('consistency_king')) {
       newAchievements.push('consistency_king');
     }
 
@@ -138,95 +145,138 @@ export function TaskManager() {
     });
 
     if (newAchievements.length > 0) {
-      setUserData(prev => ({
-        ...prev,
-        achievements: [...prev.achievements, ...newAchievements],
-        totalXP: prev.totalXP + newAchievements.reduce((sum, ach) => {
-          const data = {
-            first_task: 10,
-            task_master: 100,
-            consistency_king: 200,
-          }[ach as keyof typeof data];
-          return sum + (data || 0);
-        }, 0)
-      }));
+      const achievementXP = newAchievements.reduce((sum, ach) => {
+        const data = {
+          first_task: 10,
+          task_master: 100,
+          consistency_king: 200,
+        }[ach as keyof typeof data];
+        return sum + (data || 0);
+      }, 0);
+
+      await updateProfile({
+        achievements: [...profile.achievements, ...newAchievements],
+        total_xp: profile.total_xp + achievementXP
+      });
     }
   };
 
-  const createTask = (taskData: Omit<Task, 'id' | 'created_at' | 'completed' | 'completed_at'>) => {
-    const newTask: Task = {
-      ...taskData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString(),
-      completed: false
+  const createTask = async (taskData: Pick<Task, 'title' | 'description' | 'category' | 'priority' | 'due_date'>) => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{
+        ...taskData,
+        user_id: user.id,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: "Error Creating Task",
+        description: error.message,
+        className: "animate-fade-in border-destructive bg-destructive/10 backdrop-blur-sm"
+      });
+    } else {
+      setTasks(prev => [data, ...prev]);
+      addXP(5, "Task created!");
+      setShowTaskForm(false);
+    }
+  };
+
+  const updateTask = async (taskId: string, updates: Partial<Task>) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', taskId);
+
+    if (error) {
+      toast({
+        title: "Error Updating Task",
+        description: error.message,
+        className: "animate-fade-in border-destructive bg-destructive/10 backdrop-blur-sm"
+      });
+    } else {
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, ...updates } : task
+      ));
+      setEditingTask(null);
+    }
+  };
+
+  const toggleTaskComplete = async (taskId: string) => {
+    if (!user || !profile) return;
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const isCompleting = !task.completed;
+    const updates = {
+      completed: isCompleting,
+      completed_at: isCompleting ? new Date().toISOString() : null
     };
 
-    setTasks(prev => {
-      const updated = [newTask, ...prev];
-      return updated;
-    });
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', taskId);
 
-    addXP(5, "Task created!");
-    setShowTaskForm(false);
-  };
-
-  const updateTask = (taskId: string, updates: Partial<Task>) => {
-    setTasks(prev => {
-      const updated = prev.map(task => 
-        task.id === taskId ? { ...task, ...updates } : task
-      );
-      return updated;
-    });
-    setEditingTask(null);
-  };
-
-  const toggleTaskComplete = (taskId: string) => {
-    setTasks(prev => {
-      const updated = prev.map(task => {
-        if (task.id === taskId) {
-          const isCompleting = !task.completed;
-          const updatedTask = {
-            ...task,
-            completed: isCompleting,
-            completed_at: isCompleting ? new Date().toISOString() : undefined
-          };
-
-          if (isCompleting) {
-            // Calculate XP based on priority
-            const xpAmount = { low: 10, medium: 15, high: 25 }[task.priority];
-            setTimeout(() => addXP(xpAmount, `Task completed! (${task.priority} priority)`), 100);
-
-            // Update user stats
-            setUserData(prev => {
-              const newUserData = {
-                ...prev,
-                tasksCompleted: prev.tasksCompleted + 1,
-                currentStreak: prev.currentStreak + 1,
-                longestStreak: Math.max(prev.longestStreak, prev.currentStreak + 1)
-              };
-              
-              // Check for achievements after state update
-              setTimeout(() => checkAchievements(updated, newUserData), 200);
-              
-              return newUserData;
-            });
-          }
-
-          return updatedTask;
-        }
-        return task;
+    if (error) {
+      toast({
+        title: "Error Updating Task",
+        description: error.message,
+        className: "animate-fade-in border-destructive bg-destructive/10 backdrop-blur-sm"
       });
-      return updated;
-    });
+      return;
+    }
+
+    // Update local state
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, ...updates } : t
+    ));
+
+    if (isCompleting) {
+      // Calculate XP based on priority
+      const xpAmount = ({ low: 10, medium: 15, high: 25 } as const)[task.priority as 'low' | 'medium' | 'high'] || 10;
+      setTimeout(() => addXP(xpAmount, `Task completed! (${task.priority} priority)`), 100);
+
+      // Update user stats
+      const newTasksCompleted = profile.tasks_completed + 1;
+      const newStreak = profile.current_streak + 1;
+      
+      await updateProfile({
+        tasks_completed: newTasksCompleted,
+        current_streak: newStreak,
+        longest_streak: Math.max(profile.longest_streak, newStreak)
+      });
+
+      // Check for achievements
+      setTimeout(() => checkAchievements(newTasksCompleted), 200);
+    }
   };
 
-  const deleteTask = (taskId: string) => {
-    setTasks(prev => prev.filter(task => task.id !== taskId));
-    toast({
-      title: "Task deleted",
-      description: "Task has been permanently removed.",
-      className: "animate-fade-in border-destructive bg-card/90 backdrop-blur-sm"
-    });
+  const deleteTask = async (taskId: string) => {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', taskId);
+
+    if (error) {
+      toast({
+        title: "Error Deleting Task",
+        description: error.message,
+        className: "animate-fade-in border-destructive bg-destructive/10 backdrop-blur-sm"
+      });
+    } else {
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+      toast({
+        title: "Task deleted",
+        description: "Task has been permanently removed.",
+        className: "animate-fade-in border-destructive bg-card/90 backdrop-blur-sm"
+      });
+    }
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -235,14 +285,24 @@ export function TaskManager() {
     return true;
   });
 
-  const onFocusComplete = (minutes: number) => {
+  const onFocusComplete = async (minutes: number) => {
+    if (!profile) return;
+    
     const xpGained = minutes * 2; // 2 XP per minute
     addXP(xpGained, `${minutes} minutes of focused work!`);
     
-    setUserData(prev => ({
-      ...prev,
-      focusMinutes: prev.focusMinutes + minutes
-    }));
+    await updateProfile({
+      focus_minutes: profile.focus_minutes + minutes
+    });
+
+    // Save focus session to database
+    if (user) {
+      await supabase.from('focus_sessions').insert([{
+        user_id: user.id,
+        duration_minutes: minutes,
+        session_type: 'work'
+      }]);
+    }
   };
 
   return (
@@ -260,7 +320,16 @@ export function TaskManager() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <UserStats userData={userData} />
+              {profile && <UserStats userData={profile} />}
+              <Button
+                variant="neon-ghost"
+                size="lg"
+                onClick={signOut}
+                className="hover-glow click-scale"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out
+              </Button>
               <Button 
                 variant="neon" 
                 size="lg"
@@ -288,19 +357,19 @@ export function TaskManager() {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Level</span>
-                  <span className="text-neon-cyan font-bold">{userData.level}</span>
+                  <span className="text-neon-cyan font-bold">{profile?.current_level || 1}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total XP</span>
-                  <span className="text-neon-purple font-bold">{userData.totalXP}</span>
+                  <span className="text-neon-purple font-bold">{profile?.total_xp || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tasks Done</span>
-                  <span className="text-success font-bold">{userData.tasksCompleted}</span>
+                  <span className="text-success font-bold">{profile?.tasks_completed || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Current Streak</span>
-                  <span className="text-warning font-bold">{userData.currentStreak}</span>
+                  <span className="text-warning font-bold">{profile?.current_streak || 0}</span>
                 </div>
               </div>
             </Card>
@@ -336,12 +405,21 @@ export function TaskManager() {
 
           {/* Main Content - Task List */}
           <div className="lg:col-span-3">
-            <TaskList
-              tasks={filteredTasks}
-              onToggleComplete={toggleTaskComplete}
-              onEdit={setEditingTask}
-              onDelete={deleteTask}
-            />
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="w-12 h-12 mx-auto mb-4 border-4 border-neon-cyan border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-neon-cyan animate-pulse">Loading neural tasks...</p>
+                </div>
+              </div>
+            ) : (
+              <TaskList
+                tasks={filteredTasks}
+                onToggleComplete={toggleTaskComplete}
+                onEdit={setEditingTask}
+                onDelete={deleteTask}
+              />
+            )}
           </div>
         </div>
       </div>

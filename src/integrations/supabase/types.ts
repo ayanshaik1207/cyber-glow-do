@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      focus_sessions: {
+        Row: {
+          ambient_sound: string | null
+          created_at: string
+          duration_minutes: number
+          id: string
+          session_type: string | null
+          task_id: string | null
+          user_id: string
+        }
+        Insert: {
+          ambient_sound?: string | null
+          created_at?: string
+          duration_minutes: number
+          id?: string
+          session_type?: string | null
+          task_id?: string | null
+          user_id: string
+        }
+        Update: {
+          ambient_sound?: string | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          session_type?: string | null
+          task_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "focus_sessions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          achievements: string[] | null
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          current_level: number | null
+          current_streak: number | null
+          display_name: string | null
+          focus_minutes: number | null
+          id: string
+          longest_streak: number | null
+          tasks_completed: number | null
+          total_xp: number | null
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          achievements?: string[] | null
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          current_level?: number | null
+          current_streak?: number | null
+          display_name?: string | null
+          focus_minutes?: number | null
+          id?: string
+          longest_streak?: number | null
+          tasks_completed?: number | null
+          total_xp?: number | null
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          achievements?: string[] | null
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          current_level?: number | null
+          current_streak?: number | null
+          display_name?: string | null
+          focus_minutes?: number | null
+          id?: string
+          longest_streak?: number | null
+          tasks_completed?: number | null
+          total_xp?: number | null
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          category: string | null
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
